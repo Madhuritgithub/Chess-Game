@@ -1,6 +1,7 @@
 "use client"
 
 import React from "react"
+import Image from "next/image"
 import { PieceType, PieceColor, Position } from "../../types/chess"
 
 interface PromotionDialogProps {
@@ -44,10 +45,12 @@ export const PromotionDialog: React.FC<PromotionDialogProps> = React.memo(({
                 `}
                 title={pieceLabel}
               >
-                <img
+                <Image
                   src={`/pieces/${color}_${type}.svg`}
                   alt={pieceLabel}
-                  className="w-12 h-12 object-contain"
+                  width={48}
+                  height={48}
+                  className="object-contain"
                 />
                 <span className="text-[10px] font-bold capitalize mt-1 text-slate-500">
                   {type}

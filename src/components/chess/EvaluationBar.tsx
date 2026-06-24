@@ -13,12 +13,13 @@ export const EvaluationBar: React.FC<EvaluationBarProps> = React.memo(({
   orientation = "vertical"
 }) => {
   // Compute percentage and text label
-  const { percentage, label, blunderClass } = useMemo(() => {
+  const { percentage, label, blunderClass, isWhiteAdvantage } = useMemo(() => {
     if (!evaluation) {
       return {
         percentage: 50,
         label: "0.0",
-        blunderClass: "text-slate-400"
+        blunderClass: "text-slate-400",
+        isWhiteAdvantage: true
       }
     }
 
@@ -27,53 +28,62 @@ export const EvaluationBar: React.FC<EvaluationBarProps> = React.memo(({
     let scoreVal = 0
 
     if (type === "mate") {
-      labelText = `M${Math.abs(score)}`
-      scoreVal = score > 0 ? 10 : -10 // peg to max limits
+      labelText = score > 0 ? `Mate in ${Math.abs(score)}` : `Mate in -${Math.abs(score)}`
+      scoreVal = score > 0 ? 10 : -10
     } else {
       labelText = score > 0 ? `+${score.toFixed(1)}` : score.toFixed(1)
       scoreVal = score
     }
 
-    // Clamp score between -10 and +10 for visual representation
-    const clampedScore = Math.max(-10, Math.min(10, scoreVal))
+    // Clamp score between -10 and +10 for visual bar bounds
+    const clampedScore = Math.max(-8, Math.min(8, scoreVal))
     
-    // Percentage represents White's share of the bar (0% means Black crushing, 100% means White crushing)
-    // 0 is 50%. +10 is 100%. -10 is 0%.
-    const whitePercentage = 50 + (clampedScore / 20) * 50
+    // Percentage represents White's share of the bar (0% is Black crushing, 100% is White crushing)
+    const whitePercentage = 50 + (clampedScore / 16) * 50
 
     let blunderTextClass = "text-slate-400"
-    if (blunderStatus === "blunder") blunderTextClass = "text-red-500 font-bold animate-pulse"
-    else if (blunderStatus === "best") blunderTextClass = "text-green-500 font-bold"
-    else if (blunderStatus === "mistake") blunderTextClass = "text-amber-500"
+    if (blunderStatus === "blunder") blunderTextClass = "text-red-500 font-extrabold animate-pulse"
+    else if (blunderStatus === "best") blunderTextClass = "text-green-400 font-bold"
+    else if (blunderStatus === "mistake") blunderTextClass = "text-amber-500 font-semibold"
+    else if (blunderStatus === "inaccuracy") blunderTextClass = "text-yellow-600"
 
     return {
       percentage: whitePercentage,
       label: labelText,
-      blunderClass: blunderTextClass
+      blunderClass: blunderTextClass,
+      isWhiteAdvantage: scoreVal >= 0
     }
   }, [evaluation])
 
   const isVertical = orientation === "vertical"
 
-  // Render vertical layout (desktop)
+  // Render vertical layout (Desktop dashboard side-bar next to board)
   if (isVertical) {
     return (
-      <div className="flex flex-col items-center gap-1.5 h-full py-1">
-        <div className="relative w-5 h-[400px] md:h-full bg-slate-950 rounded-full border-2 border-slate-700/60 overflow-hidden flex flex-col justify-end">
+      <div className="flex flex-col items-center h-full py-1">
+        <div className="relative w-7 h-[420px] md:h-full bg-slate-900 rounded-full border-2 border-slate-800 shadow-[0_0_15px_rgba(0,0,0,0.5)] overflow-hidden flex flex-col justify-end">
           {/* White advantage bar (expands from bottom to top) */}
           <div
             style={{ height: `${percentage}%` }}
-            className="w-full bg-slate-100 transition-all duration-500 ease-out"
+            className="w-full bg-slate-50 transition-all duration-700 ease-out shadow-[0_0_12px_rgba(255,255,255,0.2)]"
           />
 
           {/* Absolute text label placed over the bar */}
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none">
+          <div className="absolute inset-0 flex flex-col items-center justify-between py-4 pointer-events-none select-none">
+            <span className="text-[9px] font-black font-mono text-slate-500 uppercase tracking-widest rotate-90 md:rotate-0">
+              B
+            </span>
             <span
               className={`
-                text-[8px] font-bold font-mono px-0.5 py-0.2 rounded mix-blend-difference text-white rotate-90 md:rotate-0
+                text-[10px] font-black font-mono px-1 py-0.5 rounded shadow-sm text-center
+                ${isWhiteAdvantage ? "text-slate-950 bg-slate-200/90" : "text-white bg-slate-800/90"}
+                rotate-90 md:rotate-0 transition-colors duration-300
               `}
             >
               {label}
+            </span>
+            <span className="text-[9px] font-black font-mono text-slate-400 uppercase tracking-widest rotate-90 md:rotate-0">
+              W
             </span>
           </div>
         </div>
@@ -81,34 +91,36 @@ export const EvaluationBar: React.FC<EvaluationBarProps> = React.memo(({
     )
   }
 
-  // Render horizontal layout (mobile)
+  // Render horizontal layout (Mobile screen top view)
   return (
-    <div className="flex flex-col gap-1 w-full p-2 bg-slate-900 border border-slate-800 rounded-md select-none">
-      <div className="flex justify-between items-center text-[10px] font-mono font-semibold px-1">
-        <span className="text-slate-400">Black</span>
-        <div className="flex items-center gap-1.5">
-          <span className="text-white text-xs font-bold">{label}</span>
+    <div className="flex flex-col gap-1.5 w-full p-3 bg-slate-900/60 backdrop-blur border border-slate-800 rounded-xl select-none shadow-md">
+      <div className="flex justify-between items-center text-[10px] font-mono font-bold px-1.5">
+        <span className="text-slate-500 uppercase tracking-wider">Black</span>
+        <div className="flex items-center gap-1.5 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
+          <span className={`text-xs font-black ${isWhiteAdvantage ? "text-slate-100" : "text-slate-300"}`}>
+            {label}
+          </span>
           {evaluation?.blunderStatus && evaluation.blunderStatus !== "good" && (
-            <span className={`capitalize text-[9px] ${blunderClass}`}>
-              ({evaluation.blunderStatus})
+            <span className={`capitalize text-[9px] font-extrabold ${blunderClass}`}>
+              • {evaluation.blunderStatus}
             </span>
           )}
         </div>
-        <span className="text-white">White</span>
+        <span className="text-slate-300 uppercase tracking-wider">White</span>
       </div>
 
-      <div className="relative w-full h-3 bg-slate-950 rounded-full border border-slate-800 overflow-hidden flex">
+      <div className="relative w-full h-3 bg-slate-950 rounded-full border border-slate-800 overflow-hidden flex shadow-inner">
         {/* Black side of the bar */}
-        <div className="h-full bg-slate-950 flex-1" />
+        <div className="h-full bg-slate-900 flex-1" />
         
         {/* White side of the bar (covers percentage from right) */}
         <div
           style={{ width: `${percentage}%` }}
-          className="h-full bg-slate-100 transition-all duration-500 ease-out absolute right-0 top-0 bottom-0"
+          className="h-full bg-slate-50 transition-all duration-700 ease-out absolute right-0 top-0 bottom-0 shadow-lg"
         />
 
         {/* Center divider line */}
-        <div className="absolute top-0 bottom-0 left-1/2 w-0.5 bg-slate-700/50 -translate-x-1/2" />
+        <div className="absolute top-0 bottom-0 left-1/2 w-0.5 bg-slate-700/60 -translate-x-1/2" />
       </div>
     </div>
   )

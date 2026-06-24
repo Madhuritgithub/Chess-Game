@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useCallback, useMemo } from "react"
-import { Board, Position, MoveHistoryEntry, PieceColor } from "../../types/chess"
+import { Board, Position, MoveHistoryEntry, PieceColor, BoardTheme } from "../../types/chess"
 import { ChessSquare } from "./ChessSquare"
 import { findKing, isKingInCheck } from "../../lib/game-rules"
 import { useToast } from "@/hooks/use-toast"
@@ -19,6 +19,8 @@ interface ChessBoardProps {
   handleDoubleTap: (row: number, col: number) => void
   isVsComputer: boolean
   computerColor: PieceColor
+  theme: BoardTheme
+  isBoardFlipped: boolean
 }
 
 export const ChessBoard: React.FC<ChessBoardProps> = React.memo(({
@@ -32,7 +34,9 @@ export const ChessBoard: React.FC<ChessBoardProps> = React.memo(({
   handleSquareClick,
   handleDoubleTap,
   isVsComputer,
-  computerColor
+  computerColor,
+  theme,
+  isBoardFlipped
 }) => {
   const { toast } = useToast()
   
@@ -40,7 +44,6 @@ export const ChessBoard: React.FC<ChessBoardProps> = React.memo(({
   const [focusedSquare, setFocusedSquare] = useState<Position>({ row: 7, col: 0 })
 
   // --- Compute Highlights ---
-  // Last move start and end squares
   const lastMove = useMemo(() => {
     if (moveHistory.length === 0) return null
     const index = historyIndex === -1 ? moveHistory.length - 1 : historyIndex
@@ -55,7 +58,6 @@ export const ChessBoard: React.FC<ChessBoardProps> = React.memo(({
     return matchFrom || matchTo
   }, [lastMove])
 
-  // King in check square
   const kingInCheckPos = useMemo(() => {
     const activePlayerCheck = isKingInCheck(currentPlayer, board)
     if (!activePlayerCheck) return null
@@ -72,10 +74,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = React.memo(({
     const piece = board[row][col]
     if (!piece) return
 
-    // Show standard move options
     handleSquareClick(row, col)
 
-    // Trigger toast listing destinations
     const square = posToSquare({ row, col })
     toast({
       title: `Move Preview: ${piece.color} ${piece.type} on ${square}`,
@@ -89,22 +89,28 @@ export const ChessBoard: React.FC<ChessBoardProps> = React.memo(({
     let nextRow = row
     let nextCol = col
 
+    // Adjust arrow directions based on board flipping
+    const upDir = isBoardFlipped ? 1 : -1
+    const downDir = isBoardFlipped ? -1 : 1
+    const leftDir = isBoardFlipped ? 1 : -1
+    const rightDir = isBoardFlipped ? -1 : 1
+
     switch (e.key) {
       case "ArrowUp":
         e.preventDefault()
-        if (row > 0) nextRow = row - 1
+        if (isBoardFlipped ? row < 7 : row > 0) nextRow = row + upDir
         break
       case "ArrowDown":
         e.preventDefault()
-        if (row < 7) nextRow = row + 1
+        if (isBoardFlipped ? row > 0 : row < 7) nextRow = row + downDir
         break
       case "ArrowLeft":
         e.preventDefault()
-        if (col > 0) nextCol = col - 1
+        if (isBoardFlipped ? col < 7 : col > 0) nextCol = col + leftDir
         break
       case "ArrowRight":
         e.preventDefault()
-        if (col < 7) nextCol = col + 1
+        if (isBoardFlipped ? col > 0 : col < 7) nextCol = col + rightDir
         break
       case "Enter":
       case " ":
@@ -114,7 +120,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = React.memo(({
       case "Escape":
         e.preventDefault()
         if (selectedSquare) {
-          handleSquareClick(selectedSquare.row, selectedSquare.col) // toggles selection off
+          handleSquareClick(selectedSquare.row, selectedSquare.col)
         }
         break
       default:
@@ -123,6 +129,63 @@ export const ChessBoard: React.FC<ChessBoardProps> = React.memo(({
 
     setFocusedSquare({ row: nextRow, col: nextCol })
   }
+
+  // --- Reverse loops for Flipped Rendering ---
+  const gridSquares = useMemo(() => {
+    const rows = Array.from({ length: 8 }, (_, i) => i)
+    const cols = Array.from({ length: 8 }, (_, i) => i)
+
+    if (isBoardFlipped) {
+      rows.reverse()
+      cols.reverse()
+    }
+
+    const items: React.ReactNode[] = []
+
+    rows.forEach((rowIndex) => {
+      cols.forEach((colIndex) => {
+        const piece = board[rowIndex][colIndex]
+        const isSelected = selectedSquare?.row === rowIndex && selectedSquare?.col === colIndex
+        const isValidMove = validMoves.some((m) => m.row === rowIndex && m.col === colIndex)
+        const isLast = isLastMoveSquare(rowIndex, colIndex)
+        const isChecked = isKingCheckedSquare(rowIndex, colIndex)
+        const isFocused = focusedSquare.row === rowIndex && focusedSquare.col === colIndex
+
+        items.push(
+          <ChessSquare
+            key={`${rowIndex}-${colIndex}`}
+            row={rowIndex}
+            col={colIndex}
+            piece={piece}
+            isSelected={isSelected}
+            isValidMove={isValidMove}
+            isLastMove={isLast}
+            isKingInCheck={isChecked}
+            isFocused={isFocused}
+            theme={theme}
+            isFlipped={isBoardFlipped}
+            onClick={() => handleSquareClick(rowIndex, colIndex)}
+            onDoubleTap={() => handleDoubleTap(rowIndex, colIndex)}
+            onLongPress={() => handleLongPress(rowIndex, colIndex)}
+          />
+        )
+      })
+    })
+
+    return items
+  }, [
+    board,
+    selectedSquare,
+    validMoves,
+    focusedSquare,
+    theme,
+    isBoardFlipped,
+    isLastMoveSquare,
+    isKingCheckedSquare,
+    handleSquareClick,
+    handleDoubleTap,
+    handleLongPress
+  ])
 
   return (
     <div
@@ -133,38 +196,14 @@ export const ChessBoard: React.FC<ChessBoardProps> = React.memo(({
       tabIndex={0}
       onKeyDown={handleKeyDown}
       className={`
-        relative w-full max-w-[100vw] sm:max-w-[600px] lg:max-w-[700px] aspect-square
-        grid grid-cols-8 grid-rows-8 border-4 border-slate-800 rounded-lg shadow-2xl overflow-hidden
-        focus:outline-none focus:ring-4 focus:ring-blue-500/80
-        ${isVsComputer && currentPlayer === computerColor ? "pointer-events-none opacity-90" : ""}
+        relative w-full aspect-square
+        grid grid-cols-8 grid-rows-8 border-4 border-slate-800 rounded-xl shadow-2xl overflow-hidden
+        focus:outline-none focus:ring-4 focus:ring-amber-500/50 transition-all duration-300
+        bg-slate-900
+        ${isVsComputer && currentPlayer === computerColor ? "pointer-events-none opacity-95" : ""}
       `}
     >
-      {board.map((boardRow, rowIndex) =>
-        boardRow.map((piece, colIndex) => {
-          const isSelected = selectedSquare?.row === rowIndex && selectedSquare?.col === colIndex
-          const isValidMove = validMoves.some((m) => m.row === rowIndex && m.col === colIndex)
-          const isLast = isLastMoveSquare(rowIndex, colIndex)
-          const isChecked = isKingCheckedSquare(rowIndex, colIndex)
-          const isFocused = focusedSquare.row === rowIndex && focusedSquare.col === colIndex
-
-          return (
-            <ChessSquare
-              key={`${rowIndex}-${colIndex}`}
-              row={rowIndex}
-              col={colIndex}
-              piece={piece}
-              isSelected={isSelected}
-              isValidMove={isValidMove}
-              isLastMove={isLast}
-              isKingInCheck={isChecked}
-              isFocused={isFocused}
-              onClick={() => handleSquareClick(rowIndex, colIndex)}
-              onDoubleTap={() => handleDoubleTap(rowIndex, colIndex)}
-              onLongPress={() => handleLongPress(rowIndex, colIndex)}
-            />
-          )
-        })
-      )}
+      {gridSquares}
     </div>
   )
 })

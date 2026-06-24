@@ -4,6 +4,7 @@ export type PieceColor = "white" | "black"
 export interface ChessPiece {
   type: PieceType
   color: PieceColor
+  id?: string
   hasMoved?: boolean
 }
 
@@ -43,6 +44,8 @@ export interface MoveHistoryEntry extends Move {
   enPassantTargetBefore: Position | null
   halfmoveClockBefore: number
   fullmoveNumberBefore: number
+  blunderStatus?: "blunder" | "mistake" | "inaccuracy" | "good" | "best"
+  score?: number
 }
 
 export type GameStatus =
@@ -55,6 +58,8 @@ export type GameStatus =
   | "draw-repetition"
   | "resigned"
   | "draw-agreement"
+  | "timeout-white"
+  | "timeout-black"
 
 export interface EvaluationInfo {
   score: number // score in centipawns or moves to mate
@@ -62,3 +67,14 @@ export interface EvaluationInfo {
   bestMove?: string // e.g. "e2e4"
   blunderStatus?: "blunder" | "mistake" | "inaccuracy" | "good" | "best"
 }
+
+export type GameMode = "pvp" | "vsComputer" | "analysis"
+
+export interface TimeControl {
+  name: string
+  minutes: number
+  increment: number // in seconds
+}
+
+export type BoardTheme = "classic-wood" | "emerald" | "ocean" | "midnight" | "cyberpunk"
+

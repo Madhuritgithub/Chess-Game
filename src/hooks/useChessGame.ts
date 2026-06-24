@@ -1,3 +1,5 @@
+"use client"
+
 import { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import {
   Board,
@@ -9,55 +11,71 @@ import {
   GameStatus,
   EvaluationInfo,
   Move,
-  PieceType
+  PieceType,
+  GameMode,
+  TimeControl,
+  BoardTheme
 } from "../types/chess"
 import { getLegalMoves, isKingInCheck, isCheckmate, isStalemate, isInsufficientMaterial, isThreefoldRepetition } from "../lib/game-rules"
 import { generateFen, parseFen, moveToSan, exportToPgn, parsePgnMoves, posToSquare, squareToPos } from "../lib/notation"
+import { audio } from "../lib/audio"
+
+export const DEFAULT_TIME_CONTROLS: TimeControl[] = [
+  { name: "Bullet 1+0", minutes: 1, increment: 0 },
+  { name: "Bullet 2+1", minutes: 2, increment: 1 },
+  { name: "Blitz 3+0", minutes: 3, increment: 0 },
+  { name: "Blitz 3+2", minutes: 3, increment: 2 },
+  { name: "Blitz 5+0", minutes: 5, increment: 0 },
+  { name: "Blitz 5+3", minutes: 5, increment: 3 },
+  { name: "Rapid 10+0", minutes: 10, increment: 0 },
+  { name: "Rapid 15+10", minutes: 15, increment: 10 },
+  { name: "Classical 30+0", minutes: 30, increment: 0 }
+]
 
 const initialBoard: Board = [
   [
-    { type: "rook", color: "black" },
-    { type: "knight", color: "black" },
-    { type: "bishop", color: "black" },
-    { type: "queen", color: "black" },
-    { type: "king", color: "black" },
-    { type: "bishop", color: "black" },
-    { type: "knight", color: "black" },
-    { type: "rook", color: "black" }
+    { type: "rook", color: "black", id: "b-rook-1" },
+    { type: "knight", color: "black", id: "b-knight-1" },
+    { type: "bishop", color: "black", id: "b-bishop-1" },
+    { type: "queen", color: "black", id: "b-queen" },
+    { type: "king", color: "black", id: "b-king" },
+    { type: "bishop", color: "black", id: "b-bishop-2" },
+    { type: "knight", color: "black", id: "b-knight-2" },
+    { type: "rook", color: "black", id: "b-rook-2" }
   ],
   [
-    { type: "pawn", color: "black" },
-    { type: "pawn", color: "black" },
-    { type: "pawn", color: "black" },
-    { type: "pawn", color: "black" },
-    { type: "pawn", color: "black" },
-    { type: "pawn", color: "black" },
-    { type: "pawn", color: "black" },
-    { type: "pawn", color: "black" }
+    { type: "pawn", color: "black", id: "b-pawn-1" },
+    { type: "pawn", color: "black", id: "b-pawn-2" },
+    { type: "pawn", color: "black", id: "b-pawn-3" },
+    { type: "pawn", color: "black", id: "b-pawn-4" },
+    { type: "pawn", color: "black", id: "b-pawn-5" },
+    { type: "pawn", color: "black", id: "b-pawn-6" },
+    { type: "pawn", color: "black", id: "b-pawn-7" },
+    { type: "pawn", color: "black", id: "b-pawn-8" }
   ],
   Array(8).fill(null),
   Array(8).fill(null),
   Array(8).fill(null),
   Array(8).fill(null),
   [
-    { type: "pawn", color: "white" },
-    { type: "pawn", color: "white" },
-    { type: "pawn", color: "white" },
-    { type: "pawn", color: "white" },
-    { type: "pawn", color: "white" },
-    { type: "pawn", color: "white" },
-    { type: "pawn", color: "white" },
-    { type: "pawn", color: "white" }
+    { type: "pawn", color: "white", id: "w-pawn-1" },
+    { type: "pawn", color: "white", id: "w-pawn-2" },
+    { type: "pawn", color: "white", id: "w-pawn-3" },
+    { type: "pawn", color: "white", id: "w-pawn-4" },
+    { type: "pawn", color: "white", id: "w-pawn-5" },
+    { type: "pawn", color: "white", id: "w-pawn-6" },
+    { type: "pawn", color: "white", id: "w-pawn-7" },
+    { type: "pawn", color: "white", id: "w-pawn-8" }
   ],
   [
-    { type: "rook", color: "white" },
-    { type: "knight", color: "white" },
-    { type: "bishop", color: "white" },
-    { type: "queen", color: "white" },
-    { type: "king", color: "white" },
-    { type: "bishop", color: "white" },
-    { type: "knight", color: "white" },
-    { type: "rook", color: "white" }
+    { type: "rook", color: "white", id: "w-rook-1" },
+    { type: "knight", color: "white", id: "w-knight-1" },
+    { type: "bishop", color: "white", id: "w-bishop-1" },
+    { type: "queen", color: "white", id: "w-queen" },
+    { type: "king", color: "white", id: "w-king" },
+    { type: "bishop", color: "white", id: "w-bishop-2" },
+    { type: "knight", color: "white", id: "w-knight-2" },
+    { type: "rook", color: "white", id: "w-rook-2" }
   ]
 ]
 
@@ -85,19 +103,76 @@ export function useChessGame() {
   const [promotionPending, setPromotionPending] = useState<{ from: Position; to: Position } | null>(null)
 
   // --- Stockfish States ---
-  const [isAnalysisActive, setIsAnalysisActive] = useState<boolean>(false)
-  const [isVsComputer, setIsVsComputer] = useState<boolean>(false)
+  const [isAnalysisActive, setIsAnalysisActive] = useState<boolean>(true) // enabled by default
+  const [gameMode, setGameMode] = useState<GameMode>("vsComputer")
   const [computerColor, setComputerColor] = useState<PieceColor>("black")
   const [stockfishDepth, setStockfishDepth] = useState<number>(12)
   const [evaluation, setEvaluation] = useState<EvaluationInfo | null>(null)
   const [bestMoveHint, setBestMoveHint] = useState<string | null>(null)
   const [isEngineReady, setIsEngineReady] = useState<boolean>(false)
 
+  // --- Premium Custom Features ---
+  const [boardTheme, setBoardTheme] = useState<BoardTheme>("emerald")
+  const [isBoardFlipped, setIsBoardFlipped] = useState<boolean>(false)
+  const [aiLevel, setAiLevel] = useState<number>(3)
+
+  // --- Timer states ---
+  const [timeControl, setTimeControl] = useState<TimeControl>(DEFAULT_TIME_CONTROLS[3]) // Blitz 3+2
+  const [whiteTime, setWhiteTime] = useState<number>(180)
+  const [blackTime, setBlackTime] = useState<number>(180)
+  const [isTimerActive, setIsTimerActive] = useState<boolean>(false)
+
   const workerRef = useRef<Worker | null>(null)
   const prevEvalRef = useRef<number>(0) // for blunder check
+  const bestMoveHintRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    bestMoveHintRef.current = bestMoveHint
+  }, [bestMoveHint])
+
+  // --- Load localStorage options ---
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const storedTheme = localStorage.getItem("apex-chess-theme") as BoardTheme
+      if (storedTheme) setBoardTheme(storedTheme)
+
+      const storedMode = localStorage.getItem("apex-chess-mode") as GameMode
+      if (storedMode) setGameMode(storedMode)
+
+      const storedLevel = localStorage.getItem("apex-chess-ai-level")
+      if (storedLevel) setAiLevel(parseInt(storedLevel, 10))
+    }
+  }, [])
+
+  // Theme persist setter
+  const handleSetBoardTheme = useCallback((theme: BoardTheme) => {
+    setBoardTheme(theme)
+    if (typeof window !== "undefined") {
+      localStorage.setItem("apex-chess-theme", theme)
+    }
+  }, [])
+
+  // Mode persist setter
+  const handleSetGameMode = useCallback((mode: GameMode) => {
+    setGameMode(mode)
+    if (typeof window !== "undefined") {
+      localStorage.setItem("apex-chess-mode", mode)
+    }
+    // Pause timer in analysis sandbox
+    if (mode === "analysis") {
+      setIsTimerActive(false)
+    }
+  }, [])
+
+  // AI Level persist setter
+  const handleSetAiLevel = useCallback((level: number) => {
+    setAiLevel(level)
+    if (typeof window !== "undefined") {
+      localStorage.setItem("apex-chess-ai-level", String(level))
+    }
+  }, [])
 
   // --- Dynamic Getters for History Navigation ---
-  // When reviewing history, we render the board at the historical move.
   const activeState = useMemo(() => {
     if (historyIndex === -1 || historyIndex === moveHistory.length) {
       return {
@@ -145,9 +220,9 @@ export function useChessGame() {
       const move = moveHistory[i]
       if (move.captured) {
         if (move.captured.color === "white") {
-          blackCaptured.push(move.captured) // captured by black
+          blackCaptured.push(move.captured)
         } else {
-          whiteCaptured.push(move.captured) // captured by white
+          whiteCaptured.push(move.captured)
         }
       }
     }
@@ -160,9 +235,9 @@ export function useChessGame() {
     const handleResize = () => {
       const width = window.innerWidth
       if (width < 768) {
-        setStockfishDepth(10) // Mobile (optimized depth)
+        setStockfishDepth(10) // Mobile
       } else {
-        setStockfishDepth(15) // Desktop (deeper calculation)
+        setStockfishDepth(15) // Desktop
       }
     }
 
@@ -171,9 +246,57 @@ export function useChessGame() {
     return () => window.removeEventListener("resize", handleResize)
   }, [])
 
-  // --- Stockfish Web Worker Lifecycle (Lazy Loaded) ---
+  // Timer Tick Handler
   useEffect(() => {
-    const shouldStartEngine = isAnalysisActive || (isVsComputer && currentPlayer === computerColor)
+    let timer: NodeJS.Timeout | null = null
+
+    if (
+      isTimerActive &&
+      (gameStatus === "playing" || gameStatus === "check") &&
+      gameMode !== "analysis"
+    ) {
+      timer = setInterval(() => {
+        if (currentPlayer === "white") {
+          setWhiteTime((prev) => {
+            if (prev <= 0.1) {
+              setGameStatus("timeout-white")
+              setIsTimerActive(false)
+              audio.playTimeout()
+              return 0
+            }
+            return Number((prev - 0.1).toFixed(1))
+          })
+        } else {
+          setBlackTime((prev) => {
+            if (prev <= 0.1) {
+              setGameStatus("timeout-black")
+              setIsTimerActive(false)
+              audio.playTimeout()
+              return 0
+            }
+            return Number((prev - 0.1).toFixed(1))
+          })
+        }
+      }, 100)
+    }
+
+    return () => {
+      if (timer) clearInterval(timer)
+    }
+  }, [isTimerActive, currentPlayer, gameStatus, gameMode])
+
+  // Update initial timer values when timeControl changes
+  useEffect(() => {
+    const seconds = timeControl.minutes * 60
+    setWhiteTime(seconds)
+    setBlackTime(seconds)
+    setIsTimerActive(false)
+  }, [timeControl])
+
+  // --- Stockfish Web Worker Lifecycle ---
+  useEffect(() => {
+    const isComputerTurn = gameMode === "vsComputer" && currentPlayer === computerColor
+    const shouldStartEngine = isAnalysisActive || isComputerTurn
     if (!shouldStartEngine) {
       if (workerRef.current) {
         workerRef.current.terminate()
@@ -188,10 +311,9 @@ export function useChessGame() {
     if (!workerRef.current) {
       console.log("Initializing Stockfish Web Worker...")
       workerRef.current = new Worker("/stockfish.worker.js")
-      
+
       workerRef.current.onmessage = (e: MessageEvent) => {
         const line = e.data
-        // console.log("Engine:", line);
 
         if (line === "readyok") {
           setIsEngineReady(true)
@@ -213,29 +335,66 @@ export function useChessGame() {
           if (scoreIndex !== -1) {
             const scoreType = parts[scoreIndex + 1] // "cp" or "mate"
             const scoreVal = parseInt(parts[scoreIndex + 2], 10)
-            
+
             let finalScore = scoreVal
             // Normalize score from White's perspective
-            // Stockfish returns score relative to active player. If active player is black, invert it.
             if (activeState.currentPlayer === "black" && !isNaN(finalScore)) {
               finalScore = -finalScore
             }
 
+            let computedScore = finalScore
             if (scoreType === "cp") {
-              setEvaluation((prev) => ({
-                score: finalScore / 100, // convert centipawns to pawn units
-                type: "cp",
-                bestMove: prev?.bestMove,
-                blunderStatus: prev?.blunderStatus
-              }))
-            } else if (scoreType === "mate") {
-              setEvaluation((prev) => ({
-                score: finalScore,
-                type: "mate",
-                bestMove: prev?.bestMove,
-                blunderStatus: prev?.blunderStatus
-              }))
+              computedScore = finalScore / 100
             }
+
+            // Move Classification logic for the move just played
+            const lastMovingPlayer = activeState.currentPlayer === "black" ? "white" : "black"
+            const prevScore = prevEvalRef.current
+            const newScore = computedScore
+
+            // Score change from the perspective of the player who made the move
+            const diff = lastMovingPlayer === "white" ? (newScore - prevScore) : (prevScore - newScore)
+
+            let blunderStatus: EvaluationInfo["blunderStatus"] = "good"
+            if (diff <= -2.0) {
+              blunderStatus = "blunder"
+            } else if (diff <= -1.0) {
+              blunderStatus = "mistake"
+            } else if (diff <= -0.5) {
+              blunderStatus = "inaccuracy"
+            } else if (diff >= 0.2) {
+              blunderStatus = "best"
+            }
+
+            // Update move history with the calculated classification
+            setMoveHistory((prev) => {
+              if (prev.length === 0) return prev
+              const lastIdx = prev.length - 1
+              const lastMove = prev[lastIdx]
+              if (!lastMove.blunderStatus) {
+                return prev.map((m, idx) => {
+                  if (idx === lastIdx) {
+                    return {
+                      ...m,
+                      blunderStatus,
+                      score: computedScore
+                    }
+                  }
+                  return m
+                })
+              }
+              return prev
+            })
+
+            // Update evaluation status
+            setEvaluation({
+              score: computedScore,
+              type: scoreType as "cp" | "mate",
+              bestMove: bestMoveHintRef.current || undefined,
+              blunderStatus
+            })
+
+            prevEvalRef.current = computedScore
           }
         }
       }
@@ -245,12 +404,15 @@ export function useChessGame() {
       workerRef.current.postMessage("ucinewgame")
     }
 
-    // Update position and trigger search when current FEN changes
+    // Set position and run search
     if (workerRef.current && isEngineReady) {
+      const currentDepth = isComputerTurn
+        ? [2, 4, 6, 8, 10, 12, 15, 18][aiLevel - 1]
+        : stockfishDepth
       workerRef.current.postMessage(`position fen ${currentFen}`)
-      workerRef.current.postMessage(`go depth ${stockfishDepth}`)
+      workerRef.current.postMessage(`go depth ${currentDepth}`)
     }
-  }, [isAnalysisActive, isVsComputer, computerColor, currentFen, isEngineReady, stockfishDepth, activeState.currentPlayer])
+  }, [isAnalysisActive, gameMode, computerColor, currentFen, isEngineReady, stockfishDepth, activeState.currentPlayer, aiLevel, currentPlayer])
 
   // --- Game State Resetter ---
   const resetGame = useCallback(() => {
@@ -269,16 +431,21 @@ export function useChessGame() {
     setEvaluation(null)
     setBestMoveHint(null)
     prevEvalRef.current = 0
-  }, [])
 
-  // --- Move Applier (Core Logic) ---
+    // Reset clocks
+    const seconds = timeControl.minutes * 60
+    setWhiteTime(seconds)
+    setBlackTime(seconds)
+    setIsTimerActive(false)
+  }, [timeControl])
+
+  // --- Move Applier ---
   const applyMove = useCallback((
     from: Position,
     to: Position,
     promoPiece?: PieceType
   ) => {
     if (!activeState.isLive) {
-      // If user is scrubbing history, slice the history up to the current scrub index
       const newHistory = moveHistory.slice(0, historyIndex === -1 ? moveHistory.length : historyIndex + 1)
       setMoveHistory(newHistory)
       setHistoryIndex(-1)
@@ -300,13 +467,13 @@ export function useChessGame() {
     if (movingPiece.type === "king" && Math.abs(from.col - to.col) === 2) {
       const startRow = currentPlayer === "white" ? 7 : 0
       if (to.col === 6) {
-        // Kingside castling: move Rook from H to F
+        // Kingside rook move
         const rook = newBoard[startRow][7]
         newBoard[startRow][5] = rook ? { ...rook, hasMoved: true } : null
         newBoard[startRow][7] = null
         isCastling = "kingside"
       } else if (to.col === 2) {
-        // Queenside castling: move Rook from A to D
+        // Queenside rook move
         const rook = newBoard[startRow][0]
         newBoard[startRow][3] = rook ? { ...rook, hasMoved: true } : null
         newBoard[startRow][0] = null
@@ -314,11 +481,10 @@ export function useChessGame() {
       }
     }
 
-    // 2. Handle En Passant execution
+    // 2. Handle En Passant
     if (movingPiece.type === "pawn" && enPassantTarget && to.row === enPassantTarget.row && to.col === enPassantTarget.col) {
-      // Captured pawn is on the same column, but on the starting pawn's row
       newBoard[from.row][to.col] = null
-      actualCaptured = board[from.row][to.col] // grab captured en passant pawn
+      actualCaptured = board[from.row][to.col]
       isEnPassant = true
     }
 
@@ -330,19 +496,17 @@ export function useChessGame() {
     newBoard[to.row][to.col] = movedPiece
     newBoard[from.row][from.col] = null
 
-    // 4. Update Castling Rights state
+    // 4. Update Castling Rights
     const nextCastling = {
       white: { ...castlingRights.white },
       black: { ...castlingRights.black }
     }
 
-    // King moves invalidate all castling rights
     if (movingPiece.type === "king") {
       nextCastling[currentPlayer].kingside = false
       nextCastling[currentPlayer].queenside = false
     }
 
-    // Rook moves invalidate specific side castling rights
     if (movingPiece.type === "rook") {
       const startRow = currentPlayer === "white" ? 7 : 0
       if (from.row === startRow) {
@@ -351,7 +515,6 @@ export function useChessGame() {
       }
     }
 
-    // Rook captured in corner invalidates opponent rights
     const opponent = currentPlayer === "white" ? "black" : "white"
     const oppStartRow = opponent === "white" ? 7 : 0
     if (to.row === oppStartRow) {
@@ -359,17 +522,16 @@ export function useChessGame() {
       if (to.col === 0) nextCastling[opponent].queenside = false
     }
 
-    // 5. Update En Passant target state
+    // 5. En Passant Target
     let nextEpTarget: Position | null = null
     if (movingPiece.type === "pawn" && Math.abs(from.row - to.row) === 2) {
-      // The square behind the jumped pawn
       nextEpTarget = {
         row: from.row + (currentPlayer === "white" ? -1 : 1),
         col: from.col
       }
     }
 
-    // 6. Halfmove clock updating (reset on pawn moves or captures, increment otherwise)
+    // 6. Halfmove clock
     const isPawnMove = movingPiece.type === "pawn"
     const isCapture = !!actualCaptured
     const nextHalfmove = (isPawnMove || isCapture) ? 0 : halfmoveClock + 1
@@ -377,7 +539,7 @@ export function useChessGame() {
     // 7. Fullmove increment
     const nextFullmove = currentPlayer === "black" ? fullmoveNumber + 1 : fullmoveNumber
 
-    // Prepare temp values to generate SAN
+    // Prepare temp check checks
     const nextPlayer = currentPlayer === "white" ? "black" : "white"
     const checkAfter = isKingInCheck(nextPlayer, newBoard)
     const checkmateAfter = isCheckmate(nextPlayer, newBoard, nextCastling, nextEpTarget)
@@ -411,7 +573,39 @@ export function useChessGame() {
 
     const repetitionDrawAfter = isThreefoldRepetition(fenAfter, moveHistory)
 
-    // Trigger state changes
+    // Trigger timer logic on live game
+    if (gameMode !== "analysis") {
+      // First move of the game activates the clock
+      if (!isTimerActive && moveHistory.length === 0) {
+        setIsTimerActive(true)
+      } else {
+        // Apply increment to the player who just moved
+        if (currentPlayer === "white") {
+          setWhiteTime((prev) => prev + timeControl.increment)
+        } else {
+          setBlackTime((prev) => prev + timeControl.increment)
+        }
+      }
+    }
+
+    // --- Audio Sound Triggers ---
+    if (checkmateAfter) {
+      audio.playCheckmate()
+    } else if (checkAfter) {
+      audio.playCheck()
+    } else if (stalemateAfter || materialDrawAfter || fiftyMoveDrawAfter || repetitionDrawAfter) {
+      audio.playDraw()
+    } else if (isCastling) {
+      audio.playCastle()
+    } else if (promoPiece) {
+      audio.playPromotion()
+    } else if (isCapture) {
+      audio.playCapture()
+    } else {
+      audio.playMove()
+    }
+
+    // Apply states
     setBoard(newBoard)
     setCurrentPlayer(nextPlayer)
     setCastlingRights(nextCastling)
@@ -424,61 +618,43 @@ export function useChessGame() {
     // Update history
     setMoveHistory((prev) => [...prev, historyEntry])
 
-    // Update game status
+    // Update status
     if (checkmateAfter) {
       setGameStatus("checkmate")
+      setIsTimerActive(false)
     } else if (stalemateAfter) {
       setGameStatus("stalemate")
+      setIsTimerActive(false)
     } else if (materialDrawAfter) {
       setGameStatus("draw-material")
+      setIsTimerActive(false)
     } else if (fiftyMoveDrawAfter) {
       setGameStatus("draw-fifty-move")
+      setIsTimerActive(false)
     } else if (repetitionDrawAfter) {
       setGameStatus("draw-repetition")
+      setIsTimerActive(false)
     } else if (checkAfter) {
       setGameStatus("check")
     } else {
       setGameStatus("playing")
     }
-
-    // Blunder Detection / Move Analysis
-    if (evaluation) {
-      const prevEval = prevEvalRef.current
-      const currentEval = evaluation.score
-      const diff = currentPlayer === "white" ? (currentEval - prevEval) : (prevEval - currentEval)
-
-      let blunderStatus: EvaluationInfo["blunderStatus"] = "good"
-      if (diff <= -2.0) {
-        blunderStatus = "blunder"
-      } else if (diff <= -1.0) {
-        blunderStatus = "mistake"
-      } else if (diff <= -0.5) {
-        blunderStatus = "inaccuracy"
-      } else if (diff >= 0.2) {
-        blunderStatus = "best"
-      }
-
-      setEvaluation((prev) => prev ? { ...prev, blunderStatus } : null)
-      prevEvalRef.current = currentEval
-    }
-  }, [board, currentPlayer, castlingRights, enPassantTarget, halfmoveClock, fullmoveNumber, moveHistory, historyIndex, evaluation])
+  }, [board, currentPlayer, castlingRights, enPassantTarget, halfmoveClock, fullmoveNumber, moveHistory, historyIndex, gameMode, isTimerActive, timeControl, activeState.isLive])
 
   // --- Square Click Handling ---
   const handleSquareClick = useCallback((row: number, col: number) => {
-    if (gameStatus === "checkmate" || gameStatus === "stalemate" || gameStatus.startsWith("draw")) {
+    if (gameStatus === "checkmate" || gameStatus === "stalemate" || gameStatus.startsWith("draw") || gameStatus.startsWith("timeout") || gameStatus === "resigned") {
       return
     }
 
-    // If a promotion dialog is active, block board taps
     if (promotionPending) return
 
-    // If it's computer's turn in PvC mode, block human inputs
-    if (isVsComputer && currentPlayer === computerColor) return
+    // Block human clicks if it is the AI's turn
+    if (gameMode === "vsComputer" && currentPlayer === computerColor) return
 
     const clickedPiece = activeState.board[row][col]
 
     if (selectedSquare) {
-      // Check if clicking a valid move square
       const targetMove = validMoves.find((m) => m.row === row && m.col === col)
 
       if (targetMove) {
@@ -488,13 +664,11 @@ export function useChessGame() {
           (row === 0 || row === 7)
 
         if (isPawnPromotion) {
-          // Open promotion modal
           setPromotionPending({ from: selectedSquare, to: { row, col } })
         } else {
           applyMove(selectedSquare, { row, col })
         }
       } else {
-        // Deselect or select another piece of own color
         if (clickedPiece && clickedPiece.color === currentPlayer) {
           setSelectedSquare({ row, col })
           const moves = getLegalMoves(clickedPiece, row, col, activeState.board, activeState.castlingRights, activeState.enPassantTarget)
@@ -505,14 +679,13 @@ export function useChessGame() {
         }
       }
     } else {
-      // Select piece
       if (clickedPiece && clickedPiece.color === currentPlayer) {
         setSelectedSquare({ row, col })
         const moves = getLegalMoves(clickedPiece, row, col, activeState.board, activeState.castlingRights, activeState.enPassantTarget)
         setValidMoves(moves)
       }
     }
-  }, [selectedSquare, validMoves, activeState, currentPlayer, gameStatus, promotionPending, isVsComputer, computerColor, applyMove])
+  }, [selectedSquare, validMoves, activeState, currentPlayer, gameStatus, promotionPending, gameMode, computerColor, applyMove])
 
   // Double tap to deselect
   const handleDoubleTap = useCallback((row: number, col: number) => {
@@ -522,7 +695,7 @@ export function useChessGame() {
     }
   }, [selectedSquare])
 
-  // Complete pawn promotion
+  // Promotion selector
   const handlePromoteSelection = useCallback((pieceType: PieceType) => {
     if (promotionPending) {
       applyMove(promotionPending.from, promotionPending.to, pieceType)
@@ -537,21 +710,33 @@ export function useChessGame() {
     setValidMoves([])
   }, [])
 
-  // --- Game Actions ---
+  // Resign
   const resignGame = useCallback((color: PieceColor) => {
     setGameStatus("resigned")
+    setIsTimerActive(false)
+    audio.playDraw()
   }, [])
 
+  // Offer Draw
   const offerDraw = useCallback(() => {
     setGameStatus("draw-agreement")
+    setIsTimerActive(false)
+    audio.playDraw()
   }, [])
 
-  // Navigation History scrubber
+  // Navigation History scrubbing
   const handleHistoryScrub = useCallback((index: number) => {
     if (index >= -1 && index < moveHistory.length) {
       setHistoryIndex(index)
       setSelectedSquare(null)
       setValidMoves([])
+      setIsTimerActive(false) // pause clock when scrubbing history
+
+      if (index === -1) {
+        prevEvalRef.current = moveHistory.length > 0 ? (moveHistory[moveHistory.length - 1].score || 0) : 0
+      } else {
+        prevEvalRef.current = moveHistory[index].score || 0
+      }
     }
   }, [moveHistory])
 
@@ -574,8 +759,7 @@ export function useChessGame() {
     try {
       resetGame()
       const rawMoves = parsePgnMoves(pgnText)
-      
-      // We will play moves sequentially on a temporary board state
+
       let tempBoard = initialBoard.map((row) => [...row])
       let tempPlayer: PieceColor = "white"
       let tempCastling = { ...initialCastling }
@@ -585,17 +769,14 @@ export function useChessGame() {
       const tempHistory: MoveHistoryEntry[] = []
 
       for (const sanStr of rawMoves) {
-        // Clean sanStr
         const cleanSan = sanStr.replace(/[+#]/g, "")
         let foundMove: { from: Position; to: Position; promo?: PieceType } | null = null
 
-        // Parse cleanSan to find matching move on current tempState
         if (cleanSan === "O-O" || cleanSan === "O-O-O") {
           const row = tempPlayer === "white" ? 7 : 0
           const toCol = cleanSan === "O-O" ? 6 : 2
           foundMove = { from: { row, col: 4 }, to: { row, col: toCol } }
         } else {
-          // Normal moves
           let pieceType: PieceType = "pawn"
           let targetStr = cleanSan
           let promoPiece: PieceType | undefined
@@ -620,20 +801,17 @@ export function useChessGame() {
             targetStr = targetStr.slice(1)
           }
 
-          // Strip capture 'x'
           targetStr = targetStr.replace("x", "")
           const toSquare = targetStr.slice(-2)
-          const disambig = targetStr.slice(0, -2) // remaining chars are disambiguation
+          const disambig = targetStr.slice(0, -2)
 
           const toPos = squareToPos(toSquare)
 
-          // Find candidate piece that can move to target
           let candidate: Position | null = null
           for (let r = 0; r < 8; r++) {
             for (let c = 0; c < 8; c++) {
               const p = tempBoard[r][c]
               if (p && p.color === tempPlayer && p.type === pieceType) {
-                // Check if it fits disambiguation
                 if (disambig) {
                   if (disambig.length === 1) {
                     if (FILES.includes(disambig)) {
@@ -666,7 +844,6 @@ export function useChessGame() {
           throw new Error(`Failed to parse move: ${sanStr}`)
         }
 
-        // Apply it on temp state
         const movingPiece = tempBoard[foundMove.from.row][foundMove.from.col]!
         const capturedPiece = tempBoard[foundMove.to.row][foundMove.to.col]
         let actualCaptured = capturedPiece
@@ -704,7 +881,6 @@ export function useChessGame() {
         tempBoard[foundMove.to.row][foundMove.to.col] = movedPiece
         tempBoard[foundMove.from.row][foundMove.from.col] = null
 
-        // castling rights updating
         if (movingPiece.type === "king") {
           tempCastling[tempPlayer].kingside = false
           tempCastling[tempPlayer].queenside = false
@@ -723,7 +899,6 @@ export function useChessGame() {
           if (foundMove.to.col === 0) tempCastling[opp].queenside = false
         }
 
-        // en passant updating
         let nextEp: Position | null = null
         if (movingPiece.type === "pawn" && Math.abs(foundMove.from.row - foundMove.to.row) === 2) {
           nextEp = {
@@ -764,7 +939,6 @@ export function useChessGame() {
 
         tempHistory.push(entry)
 
-        tempBoard = tempBoard
         tempPlayer = nextPlayer
         tempCastling = tempCastling
         tempEp = nextEp
@@ -772,7 +946,6 @@ export function useChessGame() {
         tempFullmove = nextFullmove
       }
 
-      // Sync state with successfully played history
       setBoard(tempBoard)
       setCurrentPlayer(tempPlayer)
       setCastlingRights(tempCastling)
@@ -781,6 +954,7 @@ export function useChessGame() {
       setFullmoveNumber(tempFullmove)
       setMoveHistory(tempHistory)
       setHistoryIndex(-1)
+      setIsTimerActive(false)
 
       const lastEntry = tempHistory[tempHistory.length - 1]
       if (lastEntry) {
@@ -810,10 +984,10 @@ export function useChessGame() {
     return exportToPgn(moveHistory)
   }, [moveHistory])
 
-  // --- Computer Auto-Move Execution (vs Computer Mode) ---
+  // --- Computer Auto-Move ---
   useEffect(() => {
-    if (isVsComputer && currentPlayer === computerColor && gameStatus === "playing" && bestMoveHint) {
-      // Wait 500ms to simulate computer thinking
+    const isComputerTurn = gameMode === "vsComputer" && currentPlayer === computerColor
+    if (isComputerTurn && (gameStatus === "playing" || gameStatus === "check") && bestMoveHint) {
       const timer = setTimeout(() => {
         const fromSquare = bestMoveHint.slice(0, 2)
         const toSquare = bestMoveHint.slice(2, 4)
@@ -831,12 +1005,12 @@ export function useChessGame() {
         }
 
         applyMove(from, to, promoPiece)
-        setBestMoveHint(null) // clear best move
-      }, 600)
+        setBestMoveHint(null)
+      }, 700)
 
       return () => clearTimeout(timer)
     }
-  }, [isVsComputer, currentPlayer, computerColor, gameStatus, bestMoveHint, applyMove])
+  }, [gameMode, currentPlayer, computerColor, gameStatus, bestMoveHint, applyMove])
 
   return {
     board: activeState.board,
@@ -851,7 +1025,7 @@ export function useChessGame() {
     validMoves,
     promotionPending,
     isAnalysisActive,
-    isVsComputer,
+    isVsComputer: gameMode === "vsComputer",
     computerColor,
     evaluation,
     bestMoveHint,
@@ -871,8 +1045,26 @@ export function useChessGame() {
     importPgn,
     exportPgn,
     setIsAnalysisActive,
-    setIsVsComputer,
-    setComputerColor
+    setIsVsComputer: (val: boolean) => handleSetGameMode(val ? "vsComputer" : "pvp"),
+    setComputerColor,
+
+    // New premium dashboard exports
+    gameMode,
+    setGameMode: handleSetGameMode,
+    boardTheme,
+    setBoardTheme: handleSetBoardTheme,
+    isBoardFlipped,
+    setIsBoardFlipped,
+    aiLevel,
+    setAiLevel: handleSetAiLevel,
+    timeControl,
+    setTimeControl,
+    whiteTime,
+    setWhiteTime,
+    blackTime,
+    setBlackTime,
+    isTimerActive,
+    setIsTimerActive
   }
 }
 

@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useMemo } from "react"
+import Image from "next/image"
 import { ChessPiece } from "../../types/chess"
 
 interface CapturedPiecesProps {
@@ -64,10 +65,12 @@ export const CapturedPieces: React.FC<CapturedPiecesProps> = React.memo(({
         ) : (
           groupedPieces.map(({ type, count }) => (
             <div key={type} className="flex items-center bg-slate-800 px-1.5 py-0.5 rounded-sm border border-slate-700/50">
-              <img
+              <Image
                 src={`/pieces/${pieceColor}_${type}.svg`}
                 alt={`${pieceColor} ${type}`}
-                className="w-5 h-5 object-contain"
+                width={20}
+                height={20}
+                className="object-contain"
               />
               {count > 1 && (
                 <span className="text-[10px] font-bold text-slate-300 ml-0.5">
