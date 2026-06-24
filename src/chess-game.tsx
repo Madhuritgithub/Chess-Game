@@ -188,7 +188,7 @@ export default function ChessGame() {
           </div>
           <div>
             <h1 className="text-xl md:text-2xl font-black tracking-wider bg-gradient-to-r from-amber-200 via-amber-400 to-amber-200 bg-clip-text text-transparent">
-              APEX CHESS
+              PC CHESS
             </h1>
             <span className="text-[9px] uppercase font-bold tracking-widest text-slate-500">
               Grandmaster Engine Suite
@@ -292,7 +292,7 @@ export default function ChessGame() {
             <div className="p-4 bg-slate-900/40 border border-slate-800 rounded-xl select-none">
               <h4 className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5 flex items-center gap-1.5">
                 <Crown className="h-3.5 w-3.5 text-amber-500" />
-                Apex Match Arena
+                PC Match Arena
               </h4>
               <p className="text-[11px] text-slate-400 leading-relaxed">
                 Play against Stockfish AI up to Level 8, challenge a friend pass-and-play style, or load custom PGN files to scrub and analyze. Enable live evaluations to watch blunders and suggestions on the fly.
