@@ -259,7 +259,8 @@ export function useChessGame() {
         if (currentPlayer === "white") {
           setWhiteTime((prev) => {
             if (prev <= 0.1) {
-              setGameStatus("timeout-white")
+              const opponentHasMaterial = !isInsufficientMaterial(board)
+              setGameStatus(opponentHasMaterial ? "timeout-white" : "draw-timeout-material")
               setIsTimerActive(false)
               audio.playTimeout()
               return 0
@@ -269,7 +270,8 @@ export function useChessGame() {
         } else {
           setBlackTime((prev) => {
             if (prev <= 0.1) {
-              setGameStatus("timeout-black")
+              const opponentHasMaterial = !isInsufficientMaterial(board)
+              setGameStatus(opponentHasMaterial ? "timeout-black" : "draw-timeout-material")
               setIsTimerActive(false)
               audio.playTimeout()
               return 0
@@ -283,7 +285,7 @@ export function useChessGame() {
     return () => {
       if (timer) clearInterval(timer)
     }
-  }, [isTimerActive, currentPlayer, gameStatus, gameMode])
+  }, [isTimerActive, currentPlayer, gameStatus, gameMode, board])
 
   // Update initial timer values when timeControl changes
   useEffect(() => {
@@ -909,7 +911,7 @@ export function useChessGame() {
 
         const nextHalfmove = (movingPiece.type === "pawn" || !!actualCaptured) ? 0 : tempHalfmove + 1
         const nextFullmove = tempPlayer === "black" ? tempFullmove + 1 : tempFullmove
-        const nextPlayer = tempPlayer === "white" ? "black" : "white"
+        const nextPlayer: PieceColor = tempPlayer === "white" ? "black" : "white"
 
         const checkAfter = isKingInCheck(nextPlayer, tempBoard)
         const checkmateAfter = isCheckmate(nextPlayer, tempBoard, tempCastling, nextEp)

@@ -60,6 +60,8 @@ export type GameStatus =
   | "draw-agreement"
   | "timeout-white"
   | "timeout-black"
+  | "draw-timeout-material"
+
 
 export interface EvaluationInfo {
   score: number // score in centipawns or moves to mate

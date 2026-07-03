@@ -276,6 +276,7 @@ export default function ChessGame() {
               {gameStatus === "draw-material" && "Insufficient mating material."}
               {gameStatus === "draw-fifty-move" && "Fifty-move rule (no pawns moved or captures made)."}
               {gameStatus === "draw-repetition" && "Threefold repetition of the position."}
+              {gameStatus === "draw-timeout-material" && "Timeout — opponent has insufficient mating material."}
             </AlertDescription>
           </Alert>
         )}
